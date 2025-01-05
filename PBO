@@ -1,0 +1,175 @@
+import pygame
+import random
+from abc import ABC, abstractmethod
+
+# Inisialisasi pygame
+pygame.init()
+
+# Konstanta untuk layar dan warna
+SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+
+# Layar dan FPS (Frame Per Second)
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Kapal vs Bomb")
+clock = pygame.time.Clock()
+
+# Muat gambar sprite Kapal, Bomb, dan Background
+ship_img = pygame.image.load("ship.png").convert_alpha()
+bomb_img = pygame.image.load("bomb.png").convert_alpha()
+background_img = pygame.image.load("ocean_background.jpg")
+
+# Skala gambar sesuai ukuran kapal yang diinginkan
+ship_width, ship_height = 100, 100  # Ukuran kapal 100x100
+bomb_width, bomb_height = 50, 50  # Ukuran bomb tetap 50x50
+ship_img = pygame.transform.scale(ship_img, (ship_width, ship_height))
+bomb_img = pygame.transform.scale(bomb_img, (bomb_width, bomb_height))
+background_img = pygame.transform.scale(background_img, (SCREEN_WIDTH, SCREEN_HEIGHT))
+
+# Kelas abstrak GameObject
+class GameObject(ABC):
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    @abstractmethod
+    def draw(self, surface):
+        pass
+
+    @abstractmethod
+    def update(self):
+        pass
+
+# Kelas Player (Kapal)
+class Player(GameObject):
+    def __init__(self, x, y):
+        super().__init__(x, y)  # Memanggil konstruktor dari GameObject
+        self._speed = 5  # Kecepatan kapal
+        self._score = 0  # Skor awal
+
+    def draw(self, surface):
+        surface.blit(ship_img, (self.x, self.y))  # Gambar kapal
+
+    def update(self, keys):
+        # Pergerakan kapal berdasarkan tombol arah
+        if keys[pygame.K_UP] and self.y > 0:
+            self.y -= self._speed
+        if keys[pygame.K_DOWN] and self.y < SCREEN_HEIGHT - ship_height:
+            self.y += self._speed
+        if keys[pygame.K_LEFT] and self.x > 0:
+            self.x -= self._speed
+        if keys[pygame.K_RIGHT] and self.x < SCREEN_WIDTH - ship_width:
+            self.x += self._speed
+
+    def get_score(self):
+        return self._score  # Mengembalikan skor pemain
+
+    def increase_score(self):
+        self._score += 1  # Menambah skor jika berhasil menghindari bom
+
+# Kelas Obstacle (Bomb)
+class Obstacle(GameObject):
+    def __init__(self, x, y, speed):
+        super().__init__(x, y)  # Memanggil konstruktor dari GameObject
+        self._speed = speed  # Kecepatan bom
+
+    def draw(self, surface):
+        surface.blit(bomb_img, (self.x, self.y))  # Gambar bom
+
+    def update(self):
+        self.x -= self._speed  # Bom bergerak ke kiri
+        if self.x < 0:
+            # Bom keluar dari layar, muncul di posisi acak
+            self.x = SCREEN_WIDTH
+            self.y = random.randint(0, SCREEN_HEIGHT - bomb_height)
+            return True
+        return False
+
+# Fungsi untuk menampilkan layar Game Over
+def show_game_over_screen(score):
+    font = pygame.font.Font(None, 72)
+    text = font.render("GAME OVER", True, BLACK)
+    score_text = font.render(f"Score: {score}", True, BLACK)
+    restart_text = pygame.font.Font(None, 36).render("Press R to Restart or Q to Quit", True, BLACK)
+
+    while True:
+        screen.fill(WHITE)  # Bersihkan layar
+        # Tampilkan teks Game Over, skor, dan instruksi restart atau quit
+        screen.blit(text, (SCREEN_WIDTH // 2 - text.get_width() // 2, SCREEN_HEIGHT // 2 - 100))
+        screen.blit(score_text, (SCREEN_WIDTH // 2 - score_text.get_width() // 2, SCREEN_HEIGHT // 2))
+        screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, SCREEN_HEIGHT // 2 + 100))
+        
+        pygame.display.flip()  # Update tampilan layar
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                return False  # Jika keluar dari game
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:
+                    return True  # Restart game jika tombol R ditekan
+                if event.key == pygame.K_q:
+                    pygame.quit()
+                    return False  # Keluar game jika tombol Q ditekan
+
+# Fungsi utama
+def main():
+    while True:
+        running = True  # Variabel untuk melanjutkan game
+        player = Player(100, 300)  # Membuat objek pemain
+        # Membuat beberapa objek bom dengan posisi acak dan kecepatan acak
+        obstacles = [Obstacle(SCREEN_WIDTH, random.randint(0, SCREEN_HEIGHT - bomb_height), random.randint(3, 7)) for _ in range(5)]
+        font = pygame.font.Font(None, 36)
+
+        background_x = 0  # Posisi awal background untuk scrolling
+
+        while running:
+            # Background scrolling
+            background_x -= 2
+            if background_x <= -SCREEN_WIDTH:
+                background_x = 0
+            screen.blit(background_img, (background_x, 0))  # Gambar background
+            screen.blit(background_img, (background_x + SCREEN_WIDTH, 0))  # Gambar ulang background untuk scrolling
+
+            # Event handling
+            keys = pygame.key.get_pressed()  # Menangkap input dari keyboard
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    return
+
+            # Update objek
+            player.update(keys)  # Update posisi kapal berdasarkan input
+            for obstacle in obstacles:
+                if obstacle.update():
+                    player.increase_score()  # Jika bom keluar dari layar, tambahkan skor
+
+            # Deteksi tabrakan
+            for obstacle in obstacles:
+                # Mengecek tabrakan antara kapal dan bom
+                if (player.x < obstacle.x + bomb_width and 
+                    player.x + ship_width > obstacle.x and 
+                    player.y < obstacle.y + bomb_height and 
+                    player.y + ship_height > obstacle.y):
+                    running = False  # Jika tabrakan, game over
+
+            # Gambar objek
+            player.draw(screen)
+            for obstacle in obstacles:
+                obstacle.draw(screen)
+
+            # Tampilkan skor
+            score_text = font.render(f"Score: {player.get_score()}", True, BLACK)
+            screen.blit(score_text, (10, 10))
+
+            pygame.display.flip()  # Update layar
+            clock.tick(30)  # Batasi FPS ke 30
+
+        if not show_game_over_screen(player.get_score()):
+            break  # Jika pemain memilih untuk keluar, keluar dari loop
+
+# Jalankan game
+if __name__ == "__main__":
+    main()
+    pygame.quit()  # Keluar dari pygame setelah game selesai
